@@ -44,4 +44,31 @@ I executed the following changes across the full stack:
 All changes are cleanly decoupled and committed off the feature branch:
 **Branch:** `danibik-feat/assesment-backend-depth` (Pending PR).
 
+## 5. Feature Extension: Recruiter Workflows (Vacancy & Email Invites)
+
+### 5.1. Database & Models
+- Added `vacancy_id` as a nullable reference to `assessments` to ensure legacy standalone assessments remain functional.
+- Injected `candidate_email`, `invitation_status` (default: `pending`), `invitation_sent_at`, and `invitation_error` to `sessions`. Added native strict email Regex validation.
+
+### 5.2. API & Email Delivery
+- Extended `POST /assessments/:id/sessions` to capture emails organically.
+- Added `POST /sessions/:id/invitation` to queue invitations. Prevents duplicate sends natively by verifying `invitation_status == 'sent'`.
+- Deployed `CandidateMailer` supported by `InvitationSenderWorker` inside existing Sidekiq orchestration. This handles unhandled SMTP failures by bounded retries (3) and safely records final fail states on the session (`invitation_status: 'failed'`).
+
+### 5.3. Predictable React UI
+- **Vacancy Handoff:** Added context-aware *Create Assessment* routing (`useLocation().state`) in `VacancyEditPage.tsx` to prefill role titles and core skills into `AssessmentNewPage.tsx` seamlessly.
+- **Invitations:** Upgraded `AssessmentInvitePage.tsx` modal to ask for email. Realtime status badges immediately reveal *Wait/Send/Sent/Failed*. Added a *Retry Invite* conditional render that surfaces `invitation_error`.
+
+### 5.4. Focused Test Verifications
+Implemented `spec/requests/api/v1/vacancy_invitation_workflow_spec.rb`. Validates 12 specific assertions including:
+- Legacy assessment validity.
+- 422 triggers for malformed candidate emails.
+- SMTP exception handling -> `failed` transition.
+- Redundant send blocks.
+- Vacancy -> Assessment data propagation.
+
+## Remaining Risks
+1. **Production SMTP Configuration:** `CandidateMailer.deliver_now` requires valid Downstream SMTP config within Rails environment secrets. If unavailable, it correctly falls to `failed` and allows retrying later.
+2. **Long Polling Overhead:** UI currently polls aggressively. Future revisions of scaling architecture should migrate session listening to ActionCable.
+
 *End of Report.*
