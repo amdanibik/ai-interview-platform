@@ -1,0 +1,47 @@
+# Fullstack Product Engineer - Case Study Report
+
+**Candidate:** [Your Name]
+**Date:** August 21, 2026
+
+## Overview
+This report outlines the end-to-end execution of the Rakamin AI Interview Platform revamp. By taking a first-principles approach, I identified gaps that actively harmed the users (privacy leaks) and product fidelity (malicious early terminations), prioritizing those over vanity refactors.
+
+## 1. Deep Context & Domain Immersion
+- **The Users:** Assessors handling candidates must trust that the output portfolio genuinely reflects a complete interview. The AI acts as a proxy for the organization.
+- **The Candidates:** Interacting with an AI can be stressful. If their data is mishandled or their connection fails abruptly ending the session before they have shown their skills, it dramatically impacts their likelihood of being hired.
+- **UU PDP (Data Privacy):** The platform logs the direct voice transcription of the candidates. When this reaches system logs in production (which are often pushed to Datadog or ELK), it creates a dangerous PII sprawl.
+
+## 2. Defining Problem & Gap to Ideal Condition
+
+| Severity | Component | Issue | Impact |
+| -------- | --------- | ----- | ------ |
+| **P0** | Backend (`LiveClient`) | PII Transcription Log Leak | Raw candidate transcripts were emitted to `Rails.logger`, violating UU PDP compliance. |
+| **P0** | Fullstack (`sessions_controller` & frontend) | Insecure Session Termination Boundary | `audio_complete` trusted the client to end the session. An attacker with a token could bypass coverage checks completely. |
+| **P1** | Backend (`EndHandler`) | Portfolio Generation Race Condition | Duplicate calls (Timeout + Manual abort) simultaneously bypassed `portfolio.present?` checks, crashing transactions. |
+
+## 3. Revamp Strategy & Trade-offs (Fixing `audio_complete`)
+
+### Evaluated Options
+**Option A: Enforce Boundary Validation on REST + UI Graceful Fallback (Chosen)**
+We maintain the REST endpoint but independently enforce `coverage_maps.all?(covered)`. If the user hits it prematurely, return `422`. The frontend is updated to break out of infinite retries on `422` and prompt the user gracefully.
+- *Pros:* Highly secure. Safely maintains the intended architecture (draining audio queues before end).
+- *Cons:* Timing micro-gap between WS and REST. Solved safely via a slight thread-safe yield.
+
+**Option B: Terminate at the WebSocket Edge**
+The moment the backend WS detects `all_covered`, it closes the DB session and closes the socket.
+- *Pros:* Impossible to spoof from the frontend.
+- *Cons:* Poor UI/UX. Cuts off the AI's "Thank you" wrap-up message and causes harsh client drops.
+
+## 4. Monozukuri Implementation
+
+I executed the following changes across the full stack:
+1. **PII Sanitization:** Cleaned up `live_client.rb` to redact `[inputTx]` strings before logging. We still retain critical observability (`turnComplete`, `has_audio`).
+2. **Secure Session Boundary:** Updated `audio_complete` to block termination if `CoverageMap` states are insufficient. Added negative RSpec edge cases to prove.
+3. **Atomic Safety:** Overhauled `Sessions::EndHandler` to use Rails native `Portfolio.create_or_find_by!` ensuring robust Postgres `UNIQUE` constraint handling natively without full transaction aborts.
+4. **Resilient UI (Vite+React):** Modded the `useAudioComplete` infinite retry loop in `InterviewPage.tsx` to detect `422` rejections and revert to `active` state gracefully, preventing absolute UI locking.
+
+## GitHub Submission
+All changes are cleanly decoupled and committed off the feature branch:
+**Branch:** `danibik-feat/assesment-backend-depth` (Pending PR).
+
+*End of Report.*
