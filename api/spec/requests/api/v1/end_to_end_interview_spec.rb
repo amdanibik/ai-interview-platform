@@ -101,6 +101,17 @@ RSpec.describe 'End-to-End Interview Flow', type: :request do
         expect(response).to have_http_status(:not_found)
       end
 
+      it 'prevents ending session if skills are not fully covered' do
+        active_session.assessment.assessment_skills.create!(
+          skill_id: 'ruby', skill_label: 'Ruby', l1_anchor: '1', l2_anchor: '2', l3_anchor: '3', l4_anchor: '4', l5_anchor: '5'
+        )
+        Sessions::StartHandler.new(active_session).call
+        
+        post "/api/v1/sessions/#{active_session.invite_token}/audio_complete", headers: base_headers
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)['errors'][0]['message']).to eq('Cannot end session: skills not fully covered')
+      end
+
       it 'handles idempotency safely if the session is already ended (eg. duplicated API call)' do
         # Mark it as ended manually
         active_session.update(status: 'ended')

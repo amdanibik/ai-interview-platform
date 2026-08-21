@@ -121,9 +121,17 @@ module Api
 
         return json_response(ended: true, message: "Session already ended") if session.ended?
 
-        # No coverage re-check here. The backend WS already verified all_covered
-        # before sending preparing_to_end. Re-checking here caused false negatives
-        # (timing gap between WS detection and HTTP call) that stalled auto-end.
+        uncovered = session.coverage_maps.configured.where.not(state: 'covered').exists?
+        if uncovered
+          # Handle timing gap between Sidekiq WS publish and DB commit
+          sleep(0.5)
+          uncovered = session.coverage_maps.configured.where.not(state: 'covered').exists?
+          if uncovered
+            Rails.logger.warn("[Security] Blocked premature audio_complete for session #{session.id}")
+            return json_error("Cannot end session: skills not fully covered", :unprocessable_entity)
+          end
+        end
+
         Sessions::EndHandler.new(session).call(reason: 'all_covered')
         json_response(ended: true, message: "Session ended")
       end
