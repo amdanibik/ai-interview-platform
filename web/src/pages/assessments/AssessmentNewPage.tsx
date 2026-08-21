@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import {
   DndContext,
   closestCenter,
@@ -37,16 +37,17 @@ export interface AssessmentFormValues {
 
 export default function AssessmentNewPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [submitting, setSubmitting] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<AssessmentFormValues>({
     defaultValues: {
-      name: "",
+      name: location.state?.roleTitle || "",
       time_limit_min: 45,
       language: "en",
-      skills: [],
+      skills: location.state?.skills || [],
     },
   });
 
@@ -90,6 +91,7 @@ export default function AssessmentNewPage() {
     try {
       const payload = {
         name: data.name,
+        vacancy_id: location.state?.vacancyId || undefined,
         time_limit_min: data.time_limit_min,
         language: data.language,
         assessment_skills_attributes: data.skills.map((s, i) => ({

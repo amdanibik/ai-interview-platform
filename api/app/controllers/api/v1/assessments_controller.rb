@@ -64,6 +64,7 @@ module Api
       def assessment_params
         params.require(:assessment).permit(
           :name,
+          :vacancy_id,
           :time_limit_min,
           :language,
           assessment_skills_attributes: %i[
@@ -80,6 +81,7 @@ module Api
 
         {
           id:             assessment.id,
+          vacancy_id:     assessment.vacancy_id,
           name:           assessment.name,
           time_limit_min: assessment.time_limit_min,
           language:       assessment.language || 'en',

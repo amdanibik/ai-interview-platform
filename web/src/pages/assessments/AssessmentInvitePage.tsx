@@ -37,6 +37,15 @@ function SessionRow({
   const isPending = session.status === "pending";
   const displayName = session.candidate_name || `Candidate ${index}`;
 
+  const handleSendInvite = async () => {
+    try {
+      await sessionsApi.sendInvitation(session.id);
+      // Let polling update the state, but we could notify success payload
+    } catch (e: any) {
+      alert(e?.response?.data?.error || "Failed to send invitation");
+    }
+  };
+
   return (
     <div className="flex items-center justify-between py-3 px-4">
       <div className="flex items-center gap-3">
@@ -44,7 +53,10 @@ function SessionRow({
           {index}
         </div>
         <div className="space-y-0.5">
-          <div className="text-sm font-medium">{displayName}</div>
+          <div className="text-sm font-medium">
+            {displayName}
+            {session.candidate_email && <span className="text-xs text-muted-foreground ml-2">({session.candidate_email})</span>}
+          </div>
           {session.started_at && (
             <div className="text-xs text-muted-foreground">
               {new Date(session.started_at).toLocaleDateString()}
@@ -80,6 +92,19 @@ function SessionRow({
         )}
 
         <div className="flex items-center gap-1.5">
+          {isPending && session.invitation_status === 'pending' && (
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={handleSendInvite}>
+              Send Invite
+            </Button>
+          )}
+          {isPending && session.invitation_status === 'failed' && (
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs text-orange-600 border-orange-200" onClick={handleSendInvite} title={session.invitation_error || "Error sending"}>
+              Retry Invite
+            </Button>
+          )}
+          {isPending && session.invitation_status === 'sent' && (
+            <span className="text-xs text-green-600 px-2">Invite Sent!</span>
+          )}
           {isPending && (
             <Button
               variant="ghost"
@@ -132,6 +157,7 @@ export default function AssessmentInvitePage() {
   const [newSessionCopied, setNewSessionCopied] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [candidateNameInput, setCandidateNameInput] = useState("");
+  const [candidateEmailInput, setCandidateEmailInput] = useState("");
 
   const loadSessions = useCallback(async () => {
     const res = await assessmentsApi.getSessions(Number(id));
@@ -145,7 +171,7 @@ export default function AssessmentInvitePage() {
     ]).then(([aRes, sRes]) => {
       setAssessment(aRes.data.assessment);
       setSessions(sRes.data.sessions);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => { }).finally(() => setLoading(false));
   }, [id]);
 
   // Poll while any session is live or pending
@@ -158,6 +184,7 @@ export default function AssessmentInvitePage() {
 
   const openInviteDialog = () => {
     setCandidateNameInput("");
+    setCandidateEmailInput("");
     setShowInviteDialog(true);
   };
 
@@ -166,7 +193,12 @@ export default function AssessmentInvitePage() {
     setShowInviteDialog(false);
     setNewSession(null);
     try {
-      const res = await assessmentsApi.createSession(Number(id), candidateNameInput.trim() || undefined);
+      const payload = {
+        candidate_name: candidateNameInput.trim() || undefined,
+        candidate_email: candidateEmailInput.trim() || undefined
+      };
+      // Passing payload directly via assessmentsApi (Assuming it takes an object in the implementation)
+      const res = await assessmentsApi.createSession(Number(id), payload);
       const created = res.data.session;
       setNewSession(created);
       setSessions((prev) => [created, ...prev]);
@@ -232,17 +264,28 @@ export default function AssessmentInvitePage() {
           <DialogHeader>
             <DialogTitle>Invite Candidate</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="candidate-name">Candidate name</Label>
-            <Input
-              id="candidate-name"
-              placeholder="e.g. Budi Santoso"
-              value={candidateNameInput}
-              onChange={(e) => setCandidateNameInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleInviteCandidate()}
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">Optional — helps you identify this session later.</p>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="candidate-name">Candidate name</Label>
+              <Input
+                id="candidate-name"
+                placeholder="e.g. Budi Santoso"
+                value={candidateNameInput}
+                onChange={(e) => setCandidateNameInput(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="candidate-email">Candidate email</Label>
+              <Input
+                id="candidate-email"
+                type="email"
+                placeholder="candidate@example.com"
+                value={candidateEmailInput}
+                onChange={(e) => setCandidateEmailInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleInviteCandidate()}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Optional — name helps you identify this session later; email allows sending invitations.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowInviteDialog(false)}>Cancel</Button>
