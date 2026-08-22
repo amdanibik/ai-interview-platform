@@ -1,0 +1,17 @@
+Errno::ECONNREFUSED - Connection refused - connect(2) for "localhost" port 25
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/net-smtp-0.5.1/lib/net/smtp.rb:663:in `initialize'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/net-smtp-0.5.1/lib/net/smtp.rb:663:in `open'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/net-smtp-0.5.1/lib/net/smtp.rb:663:in `tcp_socket'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/net-smtp-0.5.1/lib/net/smtp.rb:672:in `block in do_start'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/timeout-0.6.1/lib/timeout.rb:296:in `block in timeout'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/timeout-0.6.1/lib/timeout.rb:304:in `timeout'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/net-smtp-0.5.1/lib/net/smtp.rb:671:in `do_start'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/net-smtp-0.5.1/lib/net/smtp.rb:642:in `start'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/mail-2.9.1/lib/mail/network/delivery_methods/smtp.rb:154:in `start_smtp_session'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/mail-2.9.1/lib/mail/network/delivery_methods/smtp.rb:108:in `deliver!'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/mail-2.9.1/lib/mail/message.rb:2148:in `do_delivery'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/mail-2.9.1/lib/mail/message.rb:253:in `block in deliver'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/actionmailer-7.0.10/lib/action_mailer/base.rb:588:in `block in deliver_mail'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/activesupport-7.0.10/lib/active_support/notifications.rb:206:in `block in instrument'
+/home/danibik/.asdf/installs/ruby/3.1.2/lib/ruby/gems/3.1.0/gems/activesupport-7.0.10/lib/active_support/notifications/instrumenter.rb:24:in `instrument'
+

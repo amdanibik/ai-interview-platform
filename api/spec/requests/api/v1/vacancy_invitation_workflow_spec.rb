@@ -1,21 +1,23 @@
 require 'rails_helper'
 
 RSpec.describe 'Vacancy & Invitation Workflow', type: :request do
-  let(:user) { create(:user) }
-  let(:tenant) { user.tenant }
-  let(:base_headers) { auth_headers_for(user) }
+  let(:user) { create(:user, :admin, password: 'secure_password123') }
+  let(:tenant) { Organization.first || Organization.create!(identifier: 'test', name: 'Test', scheme: 'test', host: 'test.com') }
+  let(:base_headers) do
+  token = JsonWebToken.encode(user_id: user.id, role: user.role, scheme: tenant.scheme)
+  { 'X-Tenant-Scheme' => tenant.scheme, 'Content-Type' => 'application/json', 'Authorization' => "Bearer #{token}" }
+end
 
   describe 'Vacancy to Assessment connection' do
-    let(:vacancy) { create(:vacancy, role_title: 'Backend Dev', tenant: tenant) }
-    let!(:vacancy_skill) { create(:vacancy_skill, vacancy: vacancy, skill_id: 'ruby', skill_label: 'Ruby', expected_level: 4) }
-
-    it '1. Existing assessment without vacancy remains valid (can be created)' do
+    let(:vacancy) { Vacancy.create!(role_title: 'Backend Dev', tenant_id: tenant.id, created_by: user.id) }
+let!(:vacancy_skill) { VacancySkill.create!(vacancy_id: vacancy.id, skill_id: 'ruby', skill_label: 'Ruby', expected_level: 4) }
+it '1. Existing assessment without vacancy remains valid (can be created)' do
       attributes = {
         name: 'Standalone Role', time_limit_min: 45, language: 'en',
-        assessment_skills_attributes: [{ skill_id: 'java', skill_label: 'Java', expected_level: 3 }]
+        assessment_skills_attributes: [{ skill_id: 'java', skill_label: 'Java', expected_level: 3, l1_anchor: '1', l2_anchor: '2', l3_anchor: '3', l4_anchor: '4', l5_anchor: '5' }]
       }
-      post '/api/v1/assessments', headers: base_headers, params: { assessment: attributes }
-      expect(response).to have_http_status(:created)
+      post '/api/v1/assessments', headers: base_headers, params: { assessment: attributes }, as: :json
+      puts response.body; expect(response).to have_http_status(:created)
       expect(Assessment.last.vacancy_id).to be_nil
     end
 
@@ -26,12 +28,12 @@ RSpec.describe 'Vacancy & Invitation Workflow', type: :request do
         time_limit_min: 30,
         language: 'en',
         assessment_skills_attributes: [
-          { skill_id: vacancy_skill.skill_id, skill_label: vacancy_skill.skill_label, expected_level: 4 }
+          { skill_id: vacancy_skill.skill_id, skill_label: vacancy_skill.skill_label, expected_level: 4, l1_anchor: '1', l2_anchor: '2', l3_anchor: '3', l4_anchor: '4', l5_anchor: '5' }
         ]
       }
-      post '/api/v1/assessments', headers: base_headers, params: { assessment: attributes }
+      post '/api/v1/assessments', headers: base_headers, params: { assessment: attributes }, as: :json
       
-      expect(response).to have_http_status(:created)
+      puts response.body; expect(response).to have_http_status(:created)
       assessment = Assessment.last
       expect(assessment.vacancy_id).to eq(vacancy.id)
       expect(assessment.assessment_skills.first.skill_id).to eq('ruby')
@@ -39,14 +41,14 @@ RSpec.describe 'Vacancy & Invitation Workflow', type: :request do
   end
 
   describe 'Email Invitation Workflow' do
-    let(:assessment) { create(:assessment, tenant: tenant) }
+    let(:assessment) { create(:assessment, tenant_id: tenant.id) }
 
     it '2, 4. Session can store candidate email and starts with pending invitation' do
       post "/api/v1/assessments/#{assessment.id}/sessions", 
            headers: base_headers, 
-           params: { session: { candidate_name: 'Bob', candidate_email: 'bob@example.com' } }
+           params: { session: { candidate_name: 'Bob', candidate_email: 'bob@example.com' } }, as: :json
            
-      expect(response).to have_http_status(:created)
+      puts response.body; expect(response).to have_http_status(:created)
       session = Session.last
       expect(session.candidate_email).to eq('bob@example.com')
       expect(session.invitation_status).to eq('pending')
@@ -55,16 +57,17 @@ RSpec.describe 'Vacancy & Invitation Workflow', type: :request do
     it '3. Invalid email is rejected' do
       post "/api/v1/assessments/#{assessment.id}/sessions", 
            headers: base_headers, 
-           params: { session: { candidate_name: 'Bob', candidate_email: 'not-an-email' } }
+           params: { session: { candidate_name: 'Bob', candidate_email: 'not-an-email' } }, as: :json
            
       expect(response).to have_http_status(:unprocessable_entity)
     end
 
     context 'sending limits and state transitions' do
-      let(:session) { create(:session, assessment: assessment, candidate_email: 'alice@example.com', invitation_status: 'pending') }
+      let(:session) { create(:session, assessment: assessment, tenant_id: tenant.id, candidate_email: 'alice@example.com', invitation_status: 'pending') }
 
       it '5, 6, 9. Invitation can be sent, changes status, and duplicate send prevented' do
-        ActiveJob::Base.queue_adapter = :test
+        require 'sidekiq/testing'
+        Sidekiq::Testing.inline!
         
         post "/api/v1/sessions/#{session.id}/invitation", headers: base_headers
         expect(response).to have_http_status(:success)
@@ -78,7 +81,7 @@ RSpec.describe 'Vacancy & Invitation Workflow', type: :request do
     end
     
     context 'Sidkiq Worker Failure handling' do
-      let(:session) { create(:session, assessment: assessment, candidate_email: 'alice@test.example', invitation_status: 'pending') }
+      let(:session) { create(:session, assessment: assessment, tenant_id: tenant.id, candidate_email: 'alice@test.example', invitation_status: 'pending') }
       
       it '7, 8. Worker failed updates status, and retry works' do
         allow(CandidateMailer).to receive(:with).and_raise(StandardError.new("SMTP Down"))
@@ -92,6 +95,7 @@ RSpec.describe 'Vacancy & Invitation Workflow', type: :request do
         expect(session.invitation_error).to eq("SMTP Down")
         
         # 8. Retry works through controller point (failed allows retry)
+        Sidekiq::Testing.inline!
         allow(CandidateMailer).to receive(:with).and_call_original
         post "/api/v1/sessions/#{session.id}/invitation", headers: base_headers
         expect(response).to have_http_status(:success)

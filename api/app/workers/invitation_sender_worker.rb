@@ -25,7 +25,7 @@ class InvitationSenderWorker
       invitation_error: nil
     )
   rescue => e
-    session.update(invitation_status: 'failed', invitation_error: e.message)
+    session.update_columns(invitation_status: 'failed', invitation_error: e.message)
     raise e
   end
 end

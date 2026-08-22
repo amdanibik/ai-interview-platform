@@ -1,0 +1,37 @@
+
+Vacancy & Invitation Workflow
+  Vacancy to Assessment connection
+2026-08-22T13:09:22.031Z pid=130045 tid=2l0p INFO: Sidekiq 7.3.10 connecting to Redis with options {:size=>10, :pool_name=>"internal", :url=>"redis://localhost:6380/1"}
+{"assessment":{"id":292,"tenant_id":195,"created_by":298,"name":"Standalone Role","time_limit_min":45,"system_prompt":null,"created_at":"2026-08-22T13:09:22.025Z","updated_at":"2026-08-22T13:09:22.025Z","language":"en","vacancy_id":null},"system_prompt_generated":true}
+    1. Existing assessment without vacancy remains valid (can be created)
+{"assessment":{"id":293,"tenant_id":196,"created_by":299,"name":"Backend Dev","time_limit_min":30,"system_prompt":null,"created_at":"2026-08-22T13:09:22.069Z","updated_at":"2026-08-22T13:09:22.069Z","language":"en","vacancy_id":31},"system_prompt_generated":true}
+    10, 11, 12. Vacancy can create an assessment and prefill assessment skills
+  Email Invitation Workflow
+{"session":{"id":185,"assessment_id":294,"tenant_id":197,"candidate_id":null,"candidate_name":"Bob","candidate_email":"bob@example.com","invite_token":"b0f1fff8d30dc6c6e84ba937209bf15510603f24f52d5f64f425c19cb60621d0","invite_url":"http://localhost:5173/interview/b0f1fff8d30dc6c6e84ba937209bf15510603f24f52d5f64f425c19cb60621d0","status":"pending","invitation_status":"pending","invitation_sent_at":null,"invitation_error":null,"end_reason":null,"started_at":null,"ended_at":null,"duration_seconds":null,"created_at":"2026-08-22T13:09:22.860Z"},"invite_url":"http://localhost:5173/interview/b0f1fff8d30dc6c6e84ba937209bf15510603f24f52d5f64f425c19cb60621d0"}
+    2, 4. Session can store candidate email and starts with pending invitation
+    3. Invalid email is rejected
+    sending limits and state transitions
+      5, 6, 9. Invitation can be sent, changes status, and duplicate send prevented (FAILED - 1)
+    Sidkiq Worker Failure handling
+      7, 8. Worker failed updates status, and retry works (FAILED - 2)
+
+Failures:
+
+  1) Vacancy & Invitation Workflow Email Invitation Workflow sending limits and state transitions 5, 6, 9. Invitation can be sent, changes status, and duplicate send prevented
+     Failure/Error: expect(response).to have_http_status(:success)
+       expected the response to have a success status code (2xx) but it was 500
+     # ./spec/requests/api/v1/vacancy_invitation_workflow_spec.rb:73:in `block (4 levels) in <top (required)>'
+
+  2) Vacancy & Invitation Workflow Email Invitation Workflow Sidkiq Worker Failure handling 7, 8. Worker failed updates status, and retry works
+     Failure/Error: expect(response).to have_http_status(:success)
+       expected the response to have a success status code (2xx) but it was 500
+     # ./spec/requests/api/v1/vacancy_invitation_workflow_spec.rb:101:in `block (4 levels) in <top (required)>'
+
+Finished in 1.47 seconds (files took 1.56 seconds to load)
+6 examples, 2 failures
+
+Failed examples:
+
+rspec ./spec/requests/api/v1/vacancy_invitation_workflow_spec.rb:68 # Vacancy & Invitation Workflow Email Invitation Workflow sending limits and state transitions 5, 6, 9. Invitation can be sent, changes status, and duplicate send prevented
+rspec ./spec/requests/api/v1/vacancy_invitation_workflow_spec.rb:86 # Vacancy & Invitation Workflow Email Invitation Workflow Sidkiq Worker Failure handling 7, 8. Worker failed updates status, and retry works
+
