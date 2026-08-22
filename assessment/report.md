@@ -74,4 +74,25 @@ To ensure reliable email delivery testing without affecting live servers, Mailca
 1. **Production SMTP Configuration:** `CandidateMailer.deliver_now` requires valid Downstream SMTP config within Rails environment secrets. If unavailable, it correctly falls to `failed` and allows retrying later.
 2. **Long Polling Overhead:** UI currently polls aggressively. Future revisions of scaling architecture should migrate session listening to ActionCable.
 
+## 6. Minimum Baseline Verification (Seeded Fault)
+
+As part of the minimum baseline verification, a seeded fault was injected into the `scratch` branch to ensure the test suite correctly identifies regressions. 
+
+**Test Failure Output:**
+```text
+Failures:
+
+  1) User Callbacks downcases email before saving
+     Failure/Error: expect(user.email).to eq('uppercase@example.com')
+     
+       expected: "uppercase@example.com"
+            got: "UPPERCASE@EXAMPLE.COM"
+```
+
+**Commit History (Fault & Revert):**
+```text
+64fe858 (HEAD -> scratch) Revert "chore: inject seeded fault for testing purposes"
+acdbac4 chore: inject seeded fault for testing purposes
+```
+
 *End of Report.*
