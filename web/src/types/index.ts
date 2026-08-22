@@ -12,6 +12,10 @@ export interface Assessment {
     status: "pending" | "active" | "ended";
     end_reason?: string | null;
   };
+  vacancy?: {
+    id: number;
+    role_title: string;
+  };
 }
 
 export interface AssessmentSkill {

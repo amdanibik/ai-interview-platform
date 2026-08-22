@@ -10,7 +10,7 @@ module Api
       # GET /api/v1/assessments
       def index
         assessments = paginate(
-          Assessment.includes(:sessions).order(created_at: :desc)
+          Assessment.includes(:sessions, :vacancy).order(created_at: :desc)
         )
 
         json_response(
@@ -89,6 +89,10 @@ module Api
           created_by:     assessment.created_by,
           created_at:     assessment.created_at,
           updated_at:     assessment.updated_at,
+          vacancy:        assessment.vacancy && {
+            id:           assessment.vacancy.id,
+            role_title:   assessment.vacancy.role_title
+          },
           latest_session: latest && {
             id:         latest.id,
             status:     latest.status,

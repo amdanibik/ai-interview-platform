@@ -67,6 +67,9 @@ Implemented `spec/requests/api/v1/vacancy_invitation_workflow_spec.rb`. Validate
 - Redundant send blocks.
 - Vacancy -> Assessment data propagation.
 
+### 5.5. Local Email Debugging (Mailcatcher)
+To ensure reliable email delivery testing without affecting live servers, Mailcatcher was integrated into the local development environment. This provides a local SMTP sink and Web UI to inspect actual email payloads, verifying that invitation links are generated correctly using `APP_BASE_URL` and ensuring Sidekiq workers can successfully dispatch emails.
+
 ## Remaining Risks
 1. **Production SMTP Configuration:** `CandidateMailer.deliver_now` requires valid Downstream SMTP config within Rails environment secrets. If unavailable, it correctly falls to `failed` and allows retrying later.
 2. **Long Polling Overhead:** UI currently polls aggressively. Future revisions of scaling architecture should migrate session listening to ActionCable.
