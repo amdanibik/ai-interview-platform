@@ -95,6 +95,10 @@ GEM
     database_cleaner-core (2.1.0)
     date (3.5.1)
     diff-lcs (1.6.2)
+    dotenv (3.2.0)
+    dotenv-rails (3.2.0)
+      dotenv (= 3.2.0)
+      railties (>= 6.1)
     drb (2.2.3)
     erubi (1.13.1)
     eventmachine (1.2.7)
@@ -335,6 +339,7 @@ DEPENDENCIES
   bootsnap
   byebug
   database_cleaner
+  dotenv-rails
   factory_bot_rails
   faker
   faraday (~> 2.0)

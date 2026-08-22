@@ -141,7 +141,6 @@ module Api
       # POST /sessions/:id/invitation
       def invitation
         @session = Session.find(params[:id])
-        authorize_auth_token! :assessor
 
         if @session.candidate_email.blank?
           return json_error("No email address configured for this candidate.", :unprocessable_entity)
