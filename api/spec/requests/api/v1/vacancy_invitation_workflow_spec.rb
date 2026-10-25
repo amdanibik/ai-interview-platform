@@ -83,18 +83,20 @@ it '1. Existing assessment without vacancy remains valid (can be created)' do
     context 'Sidkiq Worker Failure handling' do
       let(:session) { create(:session, assessment: assessment, tenant_id: tenant.id, candidate_email: 'alice@test.example', invitation_status: 'pending') }
       
-      it '7, 8. Worker failed updates status, and retry works' do
+      it '7, 8. Worker failed attempt keeps status pending (retry available), and retry works' do
         allow(CandidateMailer).to receive(:with).and_raise(StandardError.new("SMTP Down"))
         
         expect {
           InvitationSenderWorker.new.perform(session.id)
         }.to raise_error("SMTP Down")
         
-        # 7. Failed status updated
-        expect(session.reload.invitation_status).to eq('failed')
-        expect(session.invitation_error).to eq("SMTP Down")
+        # 7. After a single failed attempt, status remains 'pending' because Sidekiq will retry.
+        # Only after ALL retries are exhausted (sidekiq_retries_exhausted) will it become 'failed'.
+        # The last error message is recorded for observability.
+        expect(session.reload.invitation_status).to eq('pending')
+        expect(session.invitation_error).to include("SMTP Down")
         
-        # 8. Retry works through controller point (failed allows retry)
+        # 8. Retry works through controller point (pending allows retry)
         Sidekiq::Testing.inline!
         allow(CandidateMailer).to receive(:with).and_call_original
         post "/api/v1/sessions/#{session.id}/invitation", headers: base_headers

@@ -123,15 +123,13 @@ module Api
 
         return json_response(ended: true, message: "Session already ended") if session.ended?
 
-        uncovered = session.coverage_maps.configured.where.not(state: 'covered').exists?
-        if uncovered
-          # Handle timing gap between Sidekiq WS publish and DB commit
-          sleep(0.5)
-          uncovered = session.coverage_maps.configured.where.not(state: 'covered').exists?
-          if uncovered
-            Rails.logger.warn("[Security] Blocked premature audio_complete for session #{session.id}")
-            return json_error("Cannot end session: skills not fully covered", :unprocessable_entity)
-          end
+        # Re-check coverage against the DB. The WebSocket middleware's poll_for_session_end
+        # already retries every second, so returning 422 here is safe — the frontend
+        # useAudioComplete retry loop will call this endpoint again without any sleep
+        # blocking the request thread between attempts.
+        if session.coverage_maps.configured.where.not(state: 'covered').exists?
+          Rails.logger.warn("[Security] Blocked premature audio_complete for session #{session.id}")
+          return json_error("Cannot end session: skills not fully covered", :unprocessable_entity)
         end
 
         Sessions::EndHandler.new(session).call(reason: 'all_covered')

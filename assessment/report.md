@@ -25,12 +25,17 @@ This report outlines the end-to-end execution of the Rakamin AI Interview Platfo
 **Option A: Enforce Boundary Validation on REST + UI Graceful Fallback (Chosen)**
 We maintain the REST endpoint but independently enforce `coverage_maps.all?(covered)`. If the user hits it prematurely, return `422`. The frontend is updated to break out of infinite retries on `422` and prompt the user gracefully.
 - *Pros:* Highly secure. Safely maintains the intended architecture (draining audio queues before end).
-- *Cons:* Timing micro-gap between WS and REST. Solved safely via a slight thread-safe yield.
+- *Cons:* Timing micro-gap between WS and REST requires careful handling to avoid false 422s.
 
 **Option B: Terminate at the WebSocket Edge**
 The moment the backend WS detects `all_covered`, it closes the DB session and closes the socket.
 - *Pros:* Impossible to spoof from the frontend.
 - *Cons:* Poor UI/UX. Cuts off the AI's "Thank you" wrap-up message and causes harsh client drops.
+
+**Option C: Two-Phase Commit via a Dedicated End-Session Token**
+Generate a short-lived signed token upon `all_covered` and include it in the `preparing_to_end` WebSocket message. The `audio_complete` endpoint only accepts requests bearing this token.
+- *Pros:* Eliminates the coverage re-check race entirely; the token is proof of server-side coverage verification.
+- *Cons:* Additional token management complexity; requires a token store (Redis) and expiry logic.
 
 ## 4. Monozukuri Implementation
 
@@ -46,14 +51,60 @@ All changes are cleanly decoupled and committed off the feature branch:
 
 ## 5. Feature Extension: Recruiter Workflows (Vacancy & Email Invites)
 
-### 5.1. Database & Models
+### 5.1. Database & Models — Vacancy-Assessment Connection (Design Trade-offs)
 - Added `vacancy_id` as a nullable reference to `assessments` to ensure legacy standalone assessments remain functional.
 - Injected `candidate_email`, `invitation_status` (default: `pending`), `invitation_sent_at`, and `invitation_error` to `sessions`. Added native strict email Regex validation.
 
-### 5.2. API & Email Delivery
+**Alternatif desain yang dievaluasi:**
+
+**Option A: Nullable `vacancy_id` FK on `assessments` with auto-prefill (Chosen)**
+A single nullable foreign key on `assessments` pointing to `vacancies`. When provided, skills are prefilled from `VacancySkill`.
+- *Pros:* Minimal schema change; fully backward-compatible; zero extra queries for standalone assessments.
+- *Cons:* One-to-one mapping — one vacancy can only link to one assessment at a time.
+
+**Option B: Separate `vacancy_assessments` Join Table (Many-to-Many)**
+A dedicated join table allows one vacancy to have multiple assessment versions (e.g., different language or seniority variants).
+- *Pros:* Maximum flexibility; supports A/B testing of assessment designs per vacancy.
+- *Cons:* Over-engineered for the current single-assessment-per-role use case; adds query complexity.
+
+**Option C: Denormalized Skills on Vacancy (No Assessment Skill Entity)**
+Vacancy skills act directly as assessment skills; the separate `assessment_skills` table is removed.
+- *Pros:* Single source of truth; no prefill step needed.
+- *Cons:* Loses the ability to override or extend skills per-assessment; couples assessment to vacancy lifecycle.
+
+### 5.2. API & Email Delivery — Candidate Invitation (Design Trade-offs)
 - Extended `POST /assessments/:id/sessions` to capture emails organically.
 - Added `POST /sessions/:id/invitation` to queue invitations. Prevents duplicate sends natively by verifying `invitation_status == 'sent'`.
 - Deployed `CandidateMailer` supported by `InvitationSenderWorker` inside existing Sidekiq orchestration. This handles unhandled SMTP failures by bounded retries (3) and safely records final fail states on the session (`invitation_status: 'failed'`).
+
+**Alternatif desain yang dievaluasi:**
+
+**Option A: Sidekiq Background Worker + CandidateMailer (Chosen)**
+Email delivery is offloaded to a Sidekiq worker with `retry: 3`. Failures are recorded on the session; the final failed state is set only after all retries are exhausted.
+- *Pros:* Non-blocking HTTP response; isolated failure handling; retry is automatic; good observability via Sidekiq UI.
+- *Cons:* Requires Redis and a running Sidekiq process; delivery is eventually consistent (not instant).
+
+**Option B: Synchronous SMTP in the Request Thread**
+Call `deliver_now` directly inside the controller action before responding.
+- *Pros:* Immediate feedback on success/failure; no background infrastructure needed.
+- *Cons:* Blocks the Puma thread for the full SMTP round-trip (can be 2–5s); timeouts cause HTTP 500s; poor UX under slow SMTP.
+
+**Option C: Third-Party Transactional Email API (e.g., SendGrid, Postmark)**
+Replace ActionMailer SMTP with a vendor HTTP API. Delivery status returned via webhook.
+- *Pros:* High deliverability, bounce/open tracking, no SMTP server management.
+- *Cons:* Vendor lock-in; webhook endpoint needed; per-email cost; adds external service dependency.
+
+**Email Pipeline — Cost & Failure Conditions:**
+
+| Category | Details |
+|----------|---------|
+| **Implementation cost** | Worker class, mailer class, 2 DB columns, controller action, test suite |
+| **Maintenance cost** | Monitor Sidekiq dead queue for permanently failed jobs; rotate SMTP credentials periodically; update mailer HTML template per branding changes; ensure Redis uptime for Sidekiq |
+| **Failure: SMTP down/timeout** | Worker raises → Sidekiq retries up to 3×; after exhaustion, `invitation_status` set to `failed` + error saved |
+| **Failure: Invalid recipient (bounce)** | SMTP accepts the message but bounce arrives out-of-band; not currently captured — future improvement: integrate bounce webhooks |
+| **Failure: SMTP rate limiting** | Same retry path as SMTP down; exponential backoff provides natural spacing |
+| **Failure: Redis unavailable** | `perform_async` raises at enqueue time → HTTP 500; Sidekiq cannot process any jobs until Redis recovers |
+| **Failure: Expired/invalid credentials** | `Net::SMTPAuthenticationError` raised in worker → retry path triggered; after exhaustion, `failed` state recorded |
 
 ### 5.3. Predictable React UI
 - **Vacancy Handoff:** Added context-aware *Create Assessment* routing (`useLocation().state`) in `VacancyEditPage.tsx` to prefill role titles and core skills into `AssessmentNewPage.tsx` seamlessly.
